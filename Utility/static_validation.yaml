@@ -1,0 +1,45 @@
+parameters:
+  - name: FailOnFindings
+    type: boolean
+    default: false
+  - name: Generate_TfDocs
+    type: boolean
+    default: true  
+  - name: Generate_Tags
+    type: boolean
+    default: true  
+  - name: Run_SuperLinter
+    type: boolean
+    default: true 
+  - name: workingDirectory
+    type: string
+    default: $(System.DefaultWorkingDirectory)
+
+stages: 
+  - stage: Scan
+    displayName: Static validation
+    jobs: 
+      - job: scanner
+        steps:
+          - checkout: self
+            persistCredentials: true
+
+          # tagLint
+          - ${{ if eq(parameters.Generate_Tags, 'true') }}:
+            - template: taglint/pipeline.yaml
+              parameters:
+                FailOnFindings: ${{ parameters.FailOnFindings }}
+
+          # tfDocs
+          - ${{ if eq(parameters.Generate_TfDocs, 'true') }}:
+            - template: tfdocs/pipeline.yaml
+              parameters:
+                FailOnError: ${{ parameters.FailOnFindings }}
+                workingDirectory:  ${{ parameters.workingDirectory }}
+
+          # Super-Linter
+          - ${{ if eq(parameters.Run_SuperLinter, 'true') }}:
+            - template: super_linter/pipeline.yaml
+              parameters:
+                FailOnFindings: ${{ parameters.FailOnFindings }}
+                workingDirectory:  ${{ parameters.workingDirectory }}

@@ -1,0 +1,44 @@
+parameters:
+    - name: FailOnError
+      default: false
+      type: boolean
+    - name: workingDirectory
+      type: string
+
+steps:
+  - task: Bash@3
+    displayName: tfdocs (main branch excluded)
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    inputs:
+      targetType: inline
+      workingDirectory: ${{ parameters.workingDirectory }}
+      script: |
+        if [[ -f .tfdocs/header.md ]]
+        then 
+          header=.tfdocs/header.md
+        else
+          header=main.tf
+        fi
+
+        if [[ -f .tfdocs/footer.md ]]
+        then 
+          footer=.tfdocs/footer.md
+        else
+          footer=variables.tf
+        fi
+
+        docker run --rm -v "$PWD:/data" -t quay.io/terraform-docs/terraform-docs:latest markdown table /data --output-file ./README.md --footer-from $footer --header-from $header --show "footer,header,data-sources,inputs,outputs,providers,requirements,resources" --output-mode replace
+        grep '\[\[\\_TOC\\_]]' README.md
+        sed 's#\[\[\\_TOC\\_]]#[[_TOC_]]#' <README.md | head
+        sed --in-place 's#\[\[\\_TOC\\_]]#[[_TOC_]]#' README.md
+
+        git config --global user.email "$(Build.RequestedForEmail)"
+        git config --global user.name "$(Build.RequestedFor)"
+        git pull origin $(Build.SourceBranch)
+        git add README.md
+        git commit -m "README.md (Re)generate by TF Docs"
+        git push origin HEAD:$(Build.SourceBranch)
+        git config --global --unset user.name
+        git config --global --unset user.email
+    ${{ if eq(parameters.FailOnError, false) }}:
+      continueOnError: true

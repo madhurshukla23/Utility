@@ -1,0 +1,63 @@
+parameters:
+    - name: FailOnFindings
+      default: false
+      type: boolean
+
+steps:
+  - task: Bash@3
+    displayName: 'Check if version tag already exists'
+    inputs:
+      targetType: 'inline'
+      script: |
+        # Ensure version.json path is correct
+        if [ ! -f "version.json" ]; then
+            echo "version.json file not found!"
+            exit 1
+        fi
+ 
+        # Read the version.json file to get the version to tag
+        version=$(jq -r '.module_version' version.json | sed 's/^v//')
+       
+        # Get the current branch name
+        currentBranch=$(echo "${BUILD_SOURCEBRANCHNAME}")
+ 
+        # Get the existing Git tags
+        gitTags=$(git tag -l)
+ 
+        # Use the Azure DevOps variable for the branch name
+        currentBranch=$(Build.SourceBranch)
+ 
+        if [[ "$gitTags" =~ "$version" ]]; then
+                echo "The tag $version already exists."
+                exit 1 # Exit with a non-zero code to indicate failure
+            else
+                echo "The tag $version does not exist."
+        fi     
+ 
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        # Ensure version.json path is correct
+        if [ ! -f "version.json" ]; then
+            echo "version.json file not found!"
+            exit 1
+        fi
+ 
+        # Read the version.json file to get the version to tag
+        version=$(jq -r '.module_version' version.json | sed 's/^v//')
+ 
+        # Get the current branch name
+        currentBranch=$(echo "${BUILD_SOURCEBRANCHNAME}")
+        tagName=$version
+        echo "Tagging version $version"
+        git config --global user.email "$(Build.RequestedForEmail)"
+        git config --global user.name "$(Build.RequestedFor)"
+        git tag -a $tagName -m "Releasing new tag $version"
+        git push origin $tagName --force
+        git config --global --unset user.name
+        git config --global --unset user.email
+    env:
+      GITHUB_APP_TOKEN: $(GITHUB_APP_TOKEN)
+    ${{ if eq(parameters.FailOnFindings, false) }}:
+      continueOnError: true

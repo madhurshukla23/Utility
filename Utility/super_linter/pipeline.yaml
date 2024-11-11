@@ -1,0 +1,42 @@
+parameters:
+    - name: FailOnFindings
+      default: false
+      type: boolean
+    - name: TestRunTitle
+      default: $(Build.Repository.Name)_$(Build.SourceBranchName)_tflint
+      type: string
+    - name: workingDirectory
+      type: string
+
+steps:
+  - pwsh: |
+      $terrascan = "[rules]
+          skip-rules = [
+              `"AC_AZURE_0389`", 
+              `"AC_AZURE_0356`"
+          ]"
+      $terrascan | Out-File -FilePath "$(System.DefaultWorkingDirectory)/terrascan.toml"
+      $file = "config {
+          module = false
+      }
+      plugin `"terraform`" {
+          enabled = true
+          preset = `"all`"
+      }
+      plugin `"azurerm`" {
+          enabled = true
+      }"
+      $file | Out-File -FilePath "$(System.DefaultWorkingDirectory)/.tflint.hcl"
+      docker pull github/super-linter:v5.0.0
+      docker run --rm -e RUN_LOCAL=true `
+      -e VALIDATE_YAML=false -e VALIDATE_MARKDOWN=false `
+      -e VALIDATE_NATURAL_LANGUAGE=false -e VALIDATE_TERRAFORM_FMT=false `
+      -e LINTER_RULES_PATH=/ -e FILTER_REGEX_EXCLUDE=.*tfdocs/.* `
+      -e VALIDATE_TERRAFORM_TFLINT=false -e VALIDATE_TERRAFORM_TERRASCAN=false `
+      -e USE_FIND_ALGORITHM=true -v "$(System.DefaultWorkingDirectory):/tmp/lint" `
+      github/super-linter:v5.0.0      
+    displayName: 'Run Super-Linter'
+    condition: always()
+    workingDirectory: ${{ parameters.workingDirectory }}
+    ${{ if eq(parameters.FailOnFindings, false) }}:
+      continueOnError: true
